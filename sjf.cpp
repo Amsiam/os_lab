@@ -56,7 +56,7 @@ int main() {
 
 
 
-	cout << "Avarage Tournarount Time: " << (float)turnarount_time / n << endl;
-	cout << "Avarage Waiting Time: " << (float)waiting_time / n << endl;
+	cout << "Average Turnarount Time: " << (float)turnarount_time / n << endl;
+	cout << "Average Waiting Time: " << (float)waiting_time / n << endl;
 
 }

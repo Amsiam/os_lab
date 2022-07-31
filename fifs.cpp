@@ -39,7 +39,7 @@ int main() {
 		waiting_time += processT - task[i].second;
 	}
 
-	cout << "Avarage Tournarount Time: " << turnarount_time / n << endl;
-	cout << "Avarage Waiting Time: " << waiting_time / n << endl;
+	cout << "Average Turnarount Time: " << turnarount_time / n << endl;
+	cout << "Average Waiting Time: " << waiting_time / n << endl;
 
 }

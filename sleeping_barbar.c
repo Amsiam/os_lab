@@ -24,7 +24,7 @@ int main(int argc, char *argv[])
 	/*Semaphore initialization*/
 	sem_init(&mutex, 0, 1);
 	sem_init(&customers, 0, 0);
-	sem_init(&barbers, 0, 0);
+	sem_init(&barbers, 0, 1);
 
 	/*Barber_thread initialization*/
 	status = pthread_create(&id1, NULL, (void *)barber, NULL);
