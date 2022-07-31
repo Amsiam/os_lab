@@ -1,78 +1,129 @@
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <pthread.h>
-#include <errno.h>
-#include <sys/ipc.h>
 #include <semaphore.h>
+#include <time.h>
+#include <sys/types.h>
+#include <sys/time.h>
 
-#define N 5
+void *barber_function(void *idp);
+void *customer_function(void *idp);
+void serve_customer();
+void *make_customer_function();
 
-time_t end_time;                 /*end time*/
-sem_t mutex, customers, barbers; /*Three semaphors*/
-int count = 0;                   /*The number of customers waiting for haircuts*/
+pthread_mutex_t srvCust;
 
-void barber(void *arg);
-void customer(void *arg);
+sem_t barber_ready;
+sem_t customer_ready;
+sem_t modifySeats;
 
-int main(int argc, char *argv[])
-{
-	pthread_t id1, id2;
-	int status = 0;
-	end_time = time(NULL) + 20; /*Barber Shop Hours is 20s*/
+int chair_cnt;
+int total_custs;
 
-	/*Semaphore initialization*/
-	sem_init(&mutex, 0, 1);
-	sem_init(&customers, 0, 0);
-	sem_init(&barbers, 0, 1);
+int available_seats;
+int no_served_custs = 0;
+time_t waiting_time_sum;
 
-	/*Barber_thread initialization*/
-	status = pthread_create(&id1, NULL, (void *)barber, NULL);
-	if (status != 0)
-		perror("create barbers is failure!\n");
-	/*Customer_thread initialization*/
-	status = pthread_create(&id2, NULL, (void *)customer, NULL);
-	if (status != 0)
-		perror("create customers is failure!\n");
-
-	/*Customer_thread first blocked*/
-	pthread_join(id2, NULL);
-	pthread_join(id1, NULL);
-
-	exit(0);
+void *barber_function(void *idp) {
+	int counter = 0;
+	while (1) {
+		sem_wait(&customer_ready);
+		sem_wait(&modifySeats);
+		available_seats++;
+		sem_post(&modifySeats);
+		sem_post(&barber_ready);
+		pthread_mutex_lock(&srvCust);
+		serve_customer();
+		pthread_mutex_unlock(&srvCust);
+		printf("Customer was served.\n");
+		counter++;
+		if (counter == (total_custs - no_served_custs))
+			break;
+	}
+	pthread_exit(NULL);
 }
 
-void barber(void *arg) /*Barber Process*/
+void *customer_function(void *idp) {
+	struct timeval start, stop;
+	sem_wait(&modifySeats);
+	if (available_seats >= 1) {
+		available_seats--;
+
+		printf("Customer[pid = %lu] is waiting.\n", pthread_self());
+		printf("Available seats: %d\n", available_seats);
+		gettimeofday(&start, NULL);
+		sem_post(&customer_ready);
+		sem_post(&modifySeats);
+		sem_wait(&barber_ready);
+		gettimeofday(&stop, NULL);
+
+		double sec = (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec);
+
+		waiting_time_sum += 1000 * sec;
+		printf("Customer[pid = %lu] is being served. \n", pthread_self());
+	}
+	else {
+		sem_post(&modifySeats);
+		no_served_custs++;
+		printf("A Customer left.\n");
+	}
+
+	pthread_exit(NULL);
+}
+void serve_customer()
 {
-	while (time(NULL) < end_time || count > 0)
-	{
-		sem_wait(&customers); /*P(customers)*/
-		sem_wait(&mutex);     /*P(mutex)*/
-		count--;
-		printf("Barber:cut hair,count is:%d.\n", count);
-		sem_post(&mutex);   /*V(mutex)*/
-		sem_post(&barbers); /*V(barbers)*/
-		sleep(3);
+	int s = rand() % 401;
+	s = s * 1000;
+	usleep(s);
+}
+
+void *make_customer_function() {
+	int tmp;
+	int counter = 0;
+
+	while (counter < total_custs) {
+		pthread_t customer_thread;
+		tmp = pthread_create(&customer_thread, NULL, (void *)customer_function, NULL);
+		if (tmp)
+			printf("Failed to create thread.");
+		counter++;
+		usleep(100000);
 	}
 }
 
-void customer(void *arg) /*Customers Process*/
+int main()
 {
-	while (time(NULL) < end_time)
-	{
-		sem_wait(&mutex); /*P(mutex)*/
-		if (count < N)
-		{
-			count++;
-			printf("Customer:add count,count is:%d\n", count);
-			sem_post(&mutex);    /*V(mutex)*/
-			sem_post(&customer); /*V(customers)*/
-			sem_wait(&barbers);  /*P(barbers)*/
-		}
-		else
-			/*V(mutex)*/
-			/*If the number is full of customers,just put the mutex lock let go*/
-			sem_post(&mutex);
-		sleep(1);
-	}
+	srand(time(NULL));
+	pthread_t barber_1;
+
+	pthread_t customer_maker;
+
+	int tmp;
+
+	pthread_mutex_init(&srvCust, NULL);
+	sem_init(&customer_ready, 0, 0);
+	sem_init(&barber_ready, 0, 0);
+	sem_init(&modifySeats, 0, 1);
+
+	printf("Please enter the number of seats: \n");
+	scanf("%d", &chair_cnt);
+
+	printf("Please enter the total customers: \n");
+	scanf("%d", &total_custs);
+
+	available_seats = chair_cnt;
+	tmp = pthread_create(&barber_1, NULL, (void *)barber_function, NULL);
+
+	if (tmp)
+		printf("Failed to create thread.");
+	tmp = pthread_create(&customer_maker, NULL, (void *)make_customer_function, NULL);
+	if (tmp)
+		printf("Failed to create thread.");
+	pthread_join(barber_1, NULL);
+	pthread_join(customer_maker, NULL);
+
+	printf("\n------------------------------------------------\n");
+	printf("Average customers' waiting time: %f ms.\n", (waiting_time_sum / (double)(total_custs - no_served_custs)));
+	printf("Number of customers that were forced to leave: %d\n", no_served_custs);
 }
